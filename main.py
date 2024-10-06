@@ -30,7 +30,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 # Hardcoded values
-bankroll = 41.70
+bankroll = 41
 max_bet_percentage = 25
 max_edge = 1.3
 output_file = "mlb_matchup_data.xlsx"  # Excel output file name
