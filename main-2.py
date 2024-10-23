@@ -14,7 +14,6 @@ from odds_calculations import (
     calculate_edge,
 )
 from utils import (
-    save_to_excel,
     get_team_win_percentage,
     GOOD_METRICS,
     INVERSE_METRICS,
@@ -26,6 +25,8 @@ from data_processings import (
 )
 from datetime import datetime
 import os
+import time
+import io
 
 # Streamlit imports
 import streamlit as st
@@ -33,60 +34,158 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
+# Set the page config before any other Streamlit commands
+st.set_page_config(layout="wide")
+
 # Hardcoded values
 bankroll = 41
 max_bet_percentage = 25
 max_edge = 1.3
-output_file = "mlb_matchup_data.xlsx"  # Excel output file name
 
-# Styling options
-# You can adjust these variables to change the styling
-chart_width = 500
-chart_height = 500
+# Hardcoded chart size in pixels
+chart_width = 500  # Width in pixels
+chart_height = 500  # Height in pixels
 
 # Styling options for components
 component_style = """
 <style>
-/* Style for the main container */
-.main-container {
-    background-color: #f0f0f0;
+/* Dark Theme Styles */
+
+/* Main container */
+.stApp {
+    background-color: #121212;
+    color: #FFFFFF;
     padding: 20px;
+}
+
+/* Sidebar */
+.stSidebar {
+    background-color: #1E1E1E;
+    color: #FFFFFF;
+}
+
+.stSidebar .stButton > button {
+    background-color: #BB86FC;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    transition: background-color 0.3s ease;
+}
+
+.stSidebar .stButton > button:hover {
+    background-color: #9F6BFF;
+    color: #FFFFFF;
+}
+
+.stSidebar input {
+    background-color: #2A2A2A;
+    color: #FFFFFF;
+    border: 1px solid #555555;
+    border-radius: 5px;
 }
 
 /* Style for cards */
 .card {
-    background-color: #ffffff;
-    border: 1px solid #cccccc;
-    border-radius: 10px;
-    box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    background-color: #1E1E1E;
+    border: 1px solid #333333;
+    border-radius: 15px;
     padding: 20px;
     margin-bottom: 20px;
 }
 
 /* Style for headers */
-.card h2 {
-    color: #333333;
+.card h2, .card h3, .card h4, .card h5, .card h6 {
+    color: #FFFFFF;
+    margin-top: 0;
 }
 
-/* Style for the progress bars */
+/* Text color */
+body, .markdown-text-container, .stMarkdown, .css-1cpxqw2, .stTextInput, .stNumberInput {
+    color: #FFFFFF;
+    background-color: #121212;
+}
+
+/* Style for progress bars */
 .stProgress > div > div > div > div {
-    background-color: #1f77b4;
+    background-color: #BB86FC;
 }
 
-/* Style for the metrics */
+/* Style for metrics */
 .stMetric {
-    background-color: #ffffff;
-    border: 1px solid #cccccc;
+    background-color: #1E1E1E;
+    border: 1px solid #333333;
     border-radius: 10px;
     padding: 10px;
+    color: #FFFFFF;
 }
 
-/* Style for the dataframes */
-.dataframe {
-    background-color: #ffffff;
-    border: 1px solid #cccccc;
+/* Style for dataframes */
+.stDataFrame {
+    background-color: #1E1E1E;
+    color: #FFFFFF;
+}
+
+/* Adjust scrollbar colors */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1E1E1E;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333333;
     border-radius: 10px;
-    overflow: hidden;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+
+/* Adjust input fields */
+.stTextInput input, .stNumberInput input {
+    background-color: #2A2A2A;
+    color: #FFFFFF;
+    border: 1px solid #555555;
+    border-radius: 5px;
+}
+
+.stTextInput label, .stNumberInput label {
+    color: #FFFFFF;
+}
+
+/* Button style */
+.stButton > button {
+    background-color: #BB86FC;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    transition: background-color 0.3s ease;
+}
+
+.stButton > button:hover {
+    background-color: #9F6BFF;
+    color: #FFFFFF;
+}
+
+/* Table styles */
+.stDataFrame {
+    background-color: #1E1E1E;
+    color: #FFFFFF;
+}
+
+/* Adjust headers */
+h1, h2, h3, h4, h5, h6 {
+    color: #FFFFFF;
+}
+
+/* Adjust code blocks */
+code {
+    background-color: #2A2A2A;
+    color: #FFFFFF;
 }
 </style>
 """
@@ -119,41 +218,61 @@ def plot_radar_chart(home_team, away_team, home_stats, away_stats):
     home_normalized += home_normalized[:1]
     away_normalized += away_normalized[:1]
 
-    # Plot data
-    fig, ax = plt.subplots(figsize=(chart_width/100, chart_height/100), subplot_kw=dict(polar=True))  # Adjusted size
-    ax.plot(angles, home_normalized, linewidth=2, linestyle='solid', label=home_team, color='cyan')
-    ax.fill(angles, home_normalized, alpha=0.4, color='cyan')
+    # Adjust font size based on chart size
+    base_font_size = 10
+    font_size = max(base_font_size * (chart_width / 500), 8)
 
-    ax.plot(angles, away_normalized, linewidth=2, linestyle='solid', label=away_team, color='magenta')
-    ax.fill(angles, away_normalized, alpha=0.4, color='magenta')
+    # Calculate figsize in inches (matplotlib uses inches)
+    dpi = 100  # Dots per inch
+    fig_width = chart_width / dpi
+    fig_height = chart_height / dpi
+
+    # Plot data
+    fig = plt.figure(figsize=(fig_width, fig_height), dpi=dpi)
+    ax = fig.add_subplot(111, polar=True)
+    ax.plot(angles, home_normalized, linewidth=2, linestyle='solid', label=home_team, color='#BB86FC')
+    ax.fill(angles, home_normalized, alpha=0.25, color='#BB86FC')
+
+    ax.plot(angles, away_normalized, linewidth=2, linestyle='solid', label=away_team, color='#03DAC6')
+    ax.fill(angles, away_normalized, alpha=0.25, color='#03DAC6')
 
     # Add labels
+    ax.set_facecolor('#121212')
+    ax.tick_params(colors='#FFFFFF')
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(metrics, fontsize=9)
+    ax.set_xticklabels(metrics, fontsize=font_size, color='#FFFFFF')
     ax.set_yticks([])
-    ax.legend(loc='upper right', bbox_to_anchor=(1.1, 1.1))
+    ax.spines['polar'].set_color('#FFFFFF')
+    ax.grid(color='#FFFFFF')
+    legend = ax.legend(loc='upper right', bbox_to_anchor=(1.1, 1.1))
+    plt.setp(legend.get_texts(), color='#FFFFFF')
+    fig.patch.set_facecolor('#121212')  # Set the figure background to match the app background
 
-    st.pyplot(fig)
+    # Save the figure to a BytesIO buffer and display it using st.image
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=dpi)
+    plt.close(fig)
+    st.image(buf, width=chart_width, use_column_width=False)
 
 # Function to update metrics table
 def update_metrics_table(home_team, away_team, home_stats, away_stats,
                          home_win_pct, away_win_pct, home_rank, away_rank,
                          home_odds, away_odds, implied_prob_home, implied_prob_away,
-                         home_adjusted_odds, away_adjusted_odds, edge_home, edge_away,
+                         home_adjusted_odds, away_adjusted_odds,
                          home_pythag, away_pythag, pythag_diff, win_prob):
     metric_names = [
         "Win Probability", "Current Season Win%", "Team Rank", "Moneyline Odds",
-        "Implied Probability", "Adjusted Odds", "Edge", "Pythagorean Win%", "Pythagorean Win% Difference"
+        "Implied Probability", "Adjusted Odds", "Pythagorean Win%", "Pythagorean Win% Difference"
     ]
 
     home_values = [
         (1 - win_prob), home_win_pct, home_rank, home_odds,
-        implied_prob_home, home_adjusted_odds, edge_home, home_pythag, pythag_diff
+        implied_prob_home, home_adjusted_odds, home_pythag, pythag_diff
     ]
 
     away_values = [
         win_prob, away_win_pct, away_rank, away_odds,
-        implied_prob_away, away_adjusted_odds, edge_away, away_pythag, None  # No value for pythag_diff
+        implied_prob_away, away_adjusted_odds, away_pythag, None
     ]
 
     # Add individual metrics
@@ -164,21 +283,29 @@ def update_metrics_table(home_team, away_team, home_stats, away_stats,
         home_values.append(home_stats.get(metric, 0))
         away_values.append(away_stats.get(metric, 0))
 
-    # Create DataFrame
+    # Create DataFrame with metric names in the middle and team values on sides
     data = {
-        'Metric': metric_names,
         home_team: home_values,
+        'Metric': metric_names,
         away_team: away_values
     }
-
     df = pd.DataFrame(data)
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.dataframe(df.set_index('Metric'))
-    st.markdown('</div>', unsafe_allow_html=True)
+    df = df[['Metric', home_team, away_team]]  # Reorder columns
+
+    # Style the dataframe
+    styled_df = df.style.set_properties(**{
+        'background-color': '#1E1E1E',
+        'color': '#FFFFFF',
+        'border-color': '#333333',
+        'text-align': 'center'
+    }).set_table_styles([
+        {'selector': 'th', 'props': [('background-color', '#2A2A2A'), ('color', '#FFFFFF'), ('border-color', '#333333'), ('text-align', 'center')]}
+    ]).format(precision=2)
+
+    st.write(styled_df.to_html(), unsafe_allow_html=True)
 
 # Main function
 def main():
-    st.set_page_config(layout="wide")
     st.markdown('<div class="main-container">', unsafe_allow_html=True)
     st.title("MLB Betting Algorithm")
 
@@ -192,90 +319,98 @@ def main():
     away_odds_text = st.sidebar.text_input("Away Team Moneyline Odds (e.g., +130)")
 
     if st.sidebar.button("Run Algorithm"):
-        year = datetime.now().year
-        date_today = datetime.now().strftime('%Y-%m-%d')
+        status_text = st.empty()
+        with st.spinner('Processing...'):
+            # Capture terminal output
+            buffer = io.StringIO()
+            sys.stdout = buffer  # Redirect stdout to buffer
+            try:
+                year = datetime.now().year
+                date_today = datetime.now().strftime('%Y-%m-%d')
 
-        # Validate inputs
-        try:
-            home_odds = float(home_odds_text)
-            away_odds = float(away_odds_text)
-        except ValueError:
-            st.error("Please enter valid numeric odds.")
-            return
+                # Display 'Pulling game data'
+                status_text.text('Pulling game data...')
+                time.sleep(1)
 
-        if not all([home_team, away_team, pitcher_home, pitcher_away]):
-            st.error("Please fill in all fields.")
-            return
+                # Validate inputs
+                try:
+                    home_odds = float(home_odds_text)
+                    away_odds = float(away_odds_text)
+                except ValueError:
+                    st.error("Please enter valid numeric odds.")
+                    status_text.empty()
+                    return
 
-        try:
-            home_team_stats, used_pitcher_stats_home = get_team_stats(home_team, year, pitcher_home)
-            away_team_stats, used_pitcher_stats_away = get_team_stats(away_team, year, pitcher_away)
-        except ValueError as e:
-            st.error(f"Data Error: {e}")
-            return
+                if not all([home_team, away_team, pitcher_home, pitcher_away]):
+                    st.error("Please fill in all fields.")
+                    status_text.empty()
+                    return
 
-        # Win probability calculation
-        win_prob = original_method(away_team_stats, home_team_stats)
+                try:
+                    home_team_stats, used_pitcher_stats_home = get_team_stats(home_team, year, pitcher_home)
+                    away_team_stats, used_pitcher_stats_away = get_team_stats(away_team, year, pitcher_away)
+                except ValueError as e:
+                    st.error(f"Data Error: {e}")
+                    status_text.empty()
+                    return
 
-        # Implied probabilities from odds
-        implied_prob_home = 1 / american_to_decimal(home_odds)
-        implied_prob_away = 1 / american_to_decimal(away_odds)
+                # Display 'Processing data'
+                status_text.text('Processing data...')
+                time.sleep(1)
 
-        # Adjusted odds
-        home_adjusted_odds = calculate_adjusted_odds(home_odds, 1 - win_prob, implied_prob_home)
-        away_adjusted_odds = calculate_adjusted_odds(away_odds, win_prob, implied_prob_away)
+                # Win probability calculation
+                win_prob = original_method(away_team_stats, home_team_stats)
 
-        # Edge calculation
-        edge_home = calculate_edge(home_adjusted_odds, home_odds)
-        edge_away = calculate_edge(away_adjusted_odds, away_odds)
+                # Display 'Running data through Vortex algorithm'
+                status_text.text('Running data through Vortex algorithm...')
+                time.sleep(1)
 
-        # Head-to-head data
-        h2h_wins, h2h_games = get_head_to_head(away_team, home_team, year)
+                # Implied probabilities from odds
+                implied_prob_home = 1 / american_to_decimal(home_odds)
+                implied_prob_away = 1 / american_to_decimal(away_odds)
 
-        # Current season win percentages
-        home_win_pct = get_team_win_percentage(home_team, year)
-        away_win_pct = get_team_win_percentage(away_team, year)
+                # Adjusted odds
+                home_adjusted_odds = calculate_adjusted_odds(home_odds, 1 - win_prob, implied_prob_home)
+                away_adjusted_odds = calculate_adjusted_odds(away_odds, win_prob, implied_prob_away)
 
-        # Get team rankings
-        home_rank = get_team_rank(home_team, year)
-        away_rank = get_team_rank(away_team, year)
+                # Current season win percentages
+                home_win_pct = get_team_win_percentage(home_team, year)
+                away_win_pct = get_team_win_percentage(away_team, year)
 
-        # Metrics comparison
-        better_metrics_home, better_metrics_away = compare_metrics(home_team_stats, away_team_stats)
+                # Get team rankings
+                home_rank = get_team_rank(home_team, year)
+                away_rank = get_team_rank(away_team, year)
 
-        # Calculate team scores
-        home_score = calculate_team_score(1 - win_prob, implied_prob_home, home_win_pct, home_rank, better_metrics_home)
-        away_score = calculate_team_score(win_prob, implied_prob_away, away_win_pct, away_rank, better_metrics_away)
+                # Metrics comparison
+                better_metrics_home, better_metrics_away = compare_metrics(home_team_stats, away_team_stats)
 
-        # Calculate Pythagorean Winning Percentage
-        home_pythag = calculate_pythagorean_winning_percentage(
-            home_team_stats['RunsScored'], home_team_stats['RunsAllowed']
-        )
-        away_pythag = calculate_pythagorean_winning_percentage(
-            away_team_stats['RunsScored'], away_team_stats['RunsAllowed']
-        )
-        pythag_diff = home_pythag - away_pythag
+                # Calculate Pythagorean Winning Percentage
+                home_pythag = calculate_pythagorean_winning_percentage(
+                    home_team_stats['RunsScored'], home_team_stats['RunsAllowed']
+                )
+                away_pythag = calculate_pythagorean_winning_percentage(
+                    away_team_stats['RunsScored'], away_team_stats['RunsAllowed']
+                )
+                pythag_diff = home_pythag - away_pythag
 
-        # Prepare matchup data for saving
-        matchup_data = prepare_matchup_data(
-            date_today, home_team, away_team, home_rank, away_rank, home_odds, away_odds,
-            home_adjusted_odds, away_adjusted_odds, win_prob, edge_home, edge_away,
-            None, None, better_metrics_home, better_metrics_away,
-            implied_prob_home, implied_prob_away, home_win_pct, away_win_pct,
-            home_pythag, away_pythag, pythag_diff
-        )
+                # Display results
+                display_results(
+                    better_metrics_home, better_metrics_away, home_team, away_team,
+                    win_prob, home_win_pct, away_win_pct, home_team_stats, away_team_stats,
+                    home_odds, away_odds, implied_prob_home, implied_prob_away,
+                    home_adjusted_odds, away_adjusted_odds,
+                    home_rank, away_rank, home_pythag, away_pythag, pythag_diff
+                )
+            finally:
+                sys.stdout = sys.__stdout__  # Reset stdout
 
-        # Save data to Excel
-        save_to_excel(matchup_data, output_file)
+            status_text.empty()
+            st.success("Algorithm run successfully!")
 
-        # Display results
-        display_results(
-            better_metrics_home, better_metrics_away, home_team, away_team,
-            win_prob, home_win_pct, away_win_pct, home_team_stats, away_team_stats,
-            home_odds, away_odds, implied_prob_home, implied_prob_away,
-            home_adjusted_odds, away_adjusted_odds, edge_home, edge_away,
-            home_rank, away_rank, home_pythag, away_pythag, pythag_diff
-        )
+        # Display terminal output in sidebar
+        terminal_output = buffer.getvalue()
+        st.sidebar.subheader("Terminal Output")
+        st.sidebar.text(terminal_output)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -283,49 +418,43 @@ def display_results(
     better_metrics_home, better_metrics_away, home_team, away_team,
     win_prob, home_win_pct, away_win_pct, home_team_stats, away_team_stats,
     home_odds, away_odds, implied_prob_home, implied_prob_away,
-    home_adjusted_odds, away_adjusted_odds, edge_home, edge_away,
+    home_adjusted_odds, away_adjusted_odds,
     home_rank, away_rank, home_pythag, away_pythag, pythag_diff
 ):
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("Matchup Analysis")
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # Create columns for home and away teams
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader(f"{home_team}")
-        st.metric("Better Metrics", f"{better_metrics_home}")
-        home_win_prob_percent = (1 - win_prob) * 100
-        st.progress(int(home_win_prob_percent))
-        st.write(f"Win Probability: {home_win_prob_percent:.2f}%")
+        st.markdown(f"<h2 style='text-align: center;'>{home_team}</h2>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='text-align: center;'>Win Probability: {(1 - win_prob) * 100:.2f}%</h3>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:24px; text-align: center; color:#BB86FC;'>Better Metrics:<br>{better_metrics_home}</div>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader(f"{away_team}")
-        st.metric("Better Metrics", f"{better_metrics_away}")
-        away_win_prob_percent = win_prob * 100
-        st.progress(int(away_win_prob_percent))
-        st.write(f"Win Probability: {away_win_prob_percent:.2f}%")
+        st.markdown(f"<h2 style='text-align: center;'>{away_team}</h2>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='text-align: center;'>Win Probability: {win_prob * 100:.2f}%</h3>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:24px; text-align: center; color:#03DAC6;'>Better Metrics:<br>{better_metrics_away}</div>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     # Radar Chart
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Metrics Comparison Radar Chart")
     plot_radar_chart(home_team, away_team, home_team_stats, away_team_stats)
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # Metrics Table
     st.subheader("Detailed Metrics")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     update_metrics_table(
         home_team, away_team, home_team_stats, away_team_stats,
         home_win_pct, away_win_pct, home_rank, away_rank,
         home_odds, away_odds, implied_prob_home, implied_prob_away,
-        home_adjusted_odds, away_adjusted_odds, edge_home, edge_away,
+        home_adjusted_odds, away_adjusted_odds,
         home_pythag, away_pythag, pythag_diff, win_prob
     )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
