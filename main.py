@@ -5,7 +5,7 @@ from data_collection import get_team_stats, get_team_rank, get_head_to_head, cal
 from prediction_models import original_method
 from odds_calculations import american_to_decimal, calculate_adjusted_odds, calculate_edge
 from utils import save_to_excel, get_team_win_percentage, GOOD_METRICS, INVERSE_METRICS  # Imported GOOD_METRICS and INVERSE_METRICS
-from data_processing import compare_metrics, prepare_matchup_data, calculate_team_score
+from data_processings import compare_metrics, prepare_matchup_data, calculate_team_score
 from datetime import datetime
 import os
 
