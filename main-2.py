@@ -39,6 +39,61 @@ max_bet_percentage = 25
 max_edge = 1.3
 output_file = "mlb_matchup_data.xlsx"  # Excel output file name
 
+# Styling options
+# You can adjust these variables to change the styling
+chart_width = 500
+chart_height = 500
+
+# Styling options for components
+component_style = """
+<style>
+/* Style for the main container */
+.main-container {
+    background-color: #f0f0f0;
+    padding: 20px;
+}
+
+/* Style for cards */
+.card {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 10px;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+/* Style for headers */
+.card h2 {
+    color: #333333;
+}
+
+/* Style for the progress bars */
+.stProgress > div > div > div > div {
+    background-color: #1f77b4;
+}
+
+/* Style for the metrics */
+.stMetric {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+/* Style for the dataframes */
+.dataframe {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 10px;
+    overflow: hidden;
+}
+</style>
+"""
+
+# Inject the custom CSS styles
+st.markdown(component_style, unsafe_allow_html=True)
+
 # Function to plot radar chart
 def plot_radar_chart(home_team, away_team, home_stats, away_stats):
     metrics = [
@@ -65,7 +120,7 @@ def plot_radar_chart(home_team, away_team, home_stats, away_stats):
     away_normalized += away_normalized[:1]
 
     # Plot data
-    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
+    fig, ax = plt.subplots(figsize=(chart_width/100, chart_height/100), subplot_kw=dict(polar=True))  # Adjusted size
     ax.plot(angles, home_normalized, linewidth=2, linestyle='solid', label=home_team, color='cyan')
     ax.fill(angles, home_normalized, alpha=0.4, color='cyan')
 
@@ -117,11 +172,14 @@ def update_metrics_table(home_team, away_team, home_stats, away_stats,
     }
 
     df = pd.DataFrame(data)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.dataframe(df.set_index('Metric'))
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # Main function
 def main():
     st.set_page_config(layout="wide")
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
     st.title("MLB Betting Algorithm")
 
     # Input fields
@@ -219,6 +277,8 @@ def main():
             home_rank, away_rank, home_pythag, away_pythag, pythag_diff
         )
 
+    st.markdown('</div>', unsafe_allow_html=True)
+
 def display_results(
     better_metrics_home, better_metrics_away, home_team, away_team,
     win_prob, home_win_pct, away_win_pct, home_team_stats, away_team_stats,
@@ -226,28 +286,36 @@ def display_results(
     home_adjusted_odds, away_adjusted_odds, edge_home, edge_away,
     home_rank, away_rank, home_pythag, away_pythag, pythag_diff
 ):
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("Matchup Analysis")
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Create columns for home and away teams
     col1, col2 = st.columns(2)
 
     with col1:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader(f"{home_team}")
         st.metric("Better Metrics", f"{better_metrics_home}")
         home_win_prob_percent = (1 - win_prob) * 100
         st.progress(int(home_win_prob_percent))
         st.write(f"Win Probability: {home_win_prob_percent:.2f}%")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader(f"{away_team}")
         st.metric("Better Metrics", f"{better_metrics_away}")
         away_win_prob_percent = win_prob * 100
         st.progress(int(away_win_prob_percent))
         st.write(f"Win Probability: {away_win_prob_percent:.2f}%")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Radar Chart
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Metrics Comparison Radar Chart")
     plot_radar_chart(home_team, away_team, home_team_stats, away_team_stats)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Metrics Table
     st.subheader("Detailed Metrics")
